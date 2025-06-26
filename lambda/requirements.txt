@@ -1,0 +1,11 @@
+
+dotenv
+boto3 
+sqlacodegen
+psycopg2-binary
+pgvector
+
+
+
+
+

@@ -1,0 +1,14 @@
+[Unit]
+Description=Uvicorn FastAPI app (Mercado-scraping)
+After=network.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/home/ec2-user/Mercado-scraping/backend
+# Use python -m uvicorn so that the module is executed
+ExecStart=/usr/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

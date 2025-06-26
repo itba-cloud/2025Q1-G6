@@ -1,0 +1,45 @@
+services:
+  db:
+    image: ankane/pgvector
+    container_name: mercado-scrape-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cloud
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/db_dump.sql:/docker-entrypoint-initdb.d/db_dump.sql:ro
+    ports:
+      - "5432:5432"  # Exposed port matches your original note     - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: fastapi_app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/cloud
+    depends_on:
+      - db
+
+  frontend:
+    container_name: react_app
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    stdin_open: true
+    tty: true
+    command: npm start
+
+volumes:
+  pgdata:
+
