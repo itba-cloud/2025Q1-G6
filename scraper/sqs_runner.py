@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 import boto3
 import json
 import os
@@ -29,11 +30,26 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 async def handle_message(message_body):
     """Parse SQS message and run MercadoLibre scraper, vectorize 'title' column"""
     try:
-        data = json.loads(message_body)
-        queries = data.get("queries", {})
-        scraper = MercadoLibre(queries=queries)
-
-        df = await scraper.perform_scrape()
+        logging.info(f"Received message: {message_body}")
+        data = message_body
+        # Fix: SQS FIFO messages may double-encode the body
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, str):
+            data = json.loads(data)
+        # Support both old and new message formats
+        if "queries" in data:
+            queries = data["queries"]
+        elif "query" in data and "pages_to_scrape" in data:
+            # Single query message from Lambda
+            queries = {data["query"]: data["pages_to_scrape"]}
+        else:
+            queries = {}
+        logging.info(f"Starting scrape with queries: {queries}")
+        async with aiohttp.ClientSession() as session:
+            scraper = MercadoLibre(queries=queries, session=session)
+            df = await scraper.perform_scrape()
+            logging.info(f"Scrape completed, DataFrame shape: {df.shape}")
 
         # Check if 'title' column exists
         if "title" in df.columns:
@@ -43,13 +59,18 @@ async def handle_message(message_body):
             # Add embeddings as a new column (list of floats)
             df["title_vector"] = list(embeddings)
         else:
-            print("Warning: 'title' column not found in scraped DataFrame.")
+            logging.warning("Warning: 'title' column not found in scraped DataFrame.")
 
         await load_to_db(df)
 
     except Exception as e:
-        print(f"Error handling message: {e}")
+        logging.error(f"Error handling message: {e}")
 
+async def close_requests_manager(rm):
+    try:
+        await rm.close()
+    except Exception as e:
+        logging.error(f"Error closing RequestsManager: {e}")
 
 async def load_to_db(df:pd.DataFrame):
     all_new_products = []
@@ -65,49 +86,52 @@ async def load_to_db(df:pd.DataFrame):
         query_list.extend(query_text.split("-QUERYSEP-"))
     queries_objs = database.retrieve_queries(queries=query_list)
     queries_map = {q.query_text: q for q in queries_objs}
-
-    for product in df.itertuples(index=False):
+    logging.info(f"Queries map created with {len(queries_map)} entries.")
+    for product in df.to_dict('records'):
         nearest_product = database.find_nearest_title(product)
         if nearest_product and nearest_product.distance < 0.15:
             nearest_product = database.session.query(Products).filter(Products.id == nearest_product.product_id).first()
         else:
             nearest_product = Products(
-                name = product.title,
+                name = product['title'],
             )
             all_new_products.append(nearest_product)
         all_products.append(nearest_product)
-                
+    logging.info(f"Found {len(all_products)} products to process.")
             
     if len(all_new_products) != 0:
         database.session.add_all(all_new_products)
         database.safe_commit() 
     for product in all_new_products:
         emb = ProductEmbeddings(
-            product_id = product.id,
-            embedding = list(map(float,database.model.encode(product.name, normalize_embeddings=True)))
+            product_id=product.id,
+            embedding=list(map(float, model.encode(product.name, normalize_embeddings=True)))
         )
         all_product_embeddings.append(emb)
     if len(all_product_embeddings) != 0:
         database.session.add_all(all_product_embeddings)
         database.safe_commit()
-
-    for i, prod in enumerate(df.itertuples(index=False)):
-        listing = database.find_listing_by_ml_id(prod)
+    logging.info(f"Product embeddings added for {len(all_product_embeddings)} products.")
+    for i, prod in enumerate(df.to_dict('records')):
+        if 'ml_id' not in prod:
+            logging.error(f"Error: 'ml_id' missing from DataFrame row: {prod}")
+            continue
+        listing = database.find_listing_by_ml_id(prod['ml_id'])
         if not listing:
             try:
                 distance = all_products[i].distance
             except Exception:
                 distance = 0.0
             listing = Listings(
-                external_id=prod.ml_id,
-                title=prod.title,
-                url=prod.url,
+                external_id=prod['ml_id'],
+                title=prod['title'],
+                url=prod['url'],
                 marketplace_id=1,
-                img_url=prod.img_url
+                img_url=prod['img_url']
             )
             new_listings.append(listing)
 
-            for query_text in prod.query.split("-QUERYSEP-"):
+            for query_text in prod['query'].split("-QUERYSEP-"):
                 if query_text not in queries_map:
                     continue
                 query_obj = queries_map[query_text]
@@ -120,10 +144,10 @@ async def load_to_db(df:pd.DataFrame):
                     listing=listing
                 )
                 new_candidates.append(candidate)
-        elif listing.img_url != prod.img_url:
-            listing.img_url = prod.img_url
+        elif listing.img_url != prod['img_url']:
+            listing.img_url = prod['img_url']
             safe_commit_flag = True
-        all_listings[prod] = listing
+        all_listings[prod['ml_id']] = listing
     if new_listings:
         database.session.add_all(new_listings)
         safe_commit_flag = True
@@ -137,12 +161,15 @@ async def load_to_db(df:pd.DataFrame):
         database.safe_commit()
 
     all_prices = []
-    for prod, listing in all_listings.items():
-        price = Prices(
-            listing_id=listing.id,
-            price=float(prod.price)
-        )
-        all_prices.append(price)
+    for prod_ml_id, listing in all_listings.items():
+        # Find the corresponding product data
+        prod_data = next((p for p in df.to_dict('records') if p['ml_id'] == prod_ml_id), None)
+        if prod_data:
+            price = Prices(
+                listing_id=listing.id,
+                price=float(prod_data['price'])
+            )
+            all_prices.append(price)
     database.session.add_all(all_prices)
     database.safe_commit()
     
@@ -159,11 +186,11 @@ async def poll_sqs():
             logger.error(f"Error polling SQS: {e}")
             await asyncio.sleep(5)  # Wait before retrying
             continue
-
+        
         messages = response.get("Messages", [])
         if not messages:
             continue
-
+        logger.info(messages)
         for msg in messages:
             receipt_handle = msg["ReceiptHandle"]
             body = msg["Body"]
@@ -174,4 +201,10 @@ async def poll_sqs():
             sqs.delete_message(QueueUrl=SQS_QUEUE_URL, ReceiptHandle=receipt_handle)
 
 if __name__ == "__main__":
-    asyncio.run(poll_sqs())
+    try:
+        asyncio.run(poll_sqs())
+    except RuntimeError as e:
+        # If already in an event loop (e.g. in some ECS/Fargate setups), use alternative
+        loop = asyncio.get_event_loop()
+        loop.create_task(poll_sqs())
+        loop.run_forever()

@@ -1,18 +1,9 @@
-import asyncio
 from models import *
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-from sentence_transformers import SentenceTransformer
-from base.mercadolibre import MercadoLibre
-from sqlalchemy import select
 from sqlalchemy.exc import PendingRollbackError
 import os
 
-from dotenv import load_dotenv
-import os
-from sqlalchemy.orm import class_mapper
 import logging
 import traceback
 logging.basicConfig(level=logging.INFO)
@@ -55,12 +46,8 @@ class Database:
             # Create required enum types
             self.create_enum_types()
             
-            # Create all tables
-            Base.metadata.create_all(self.engine)
-            logger.info("✅ Database tables created successfully")
             
-            # Check if basic data exists, if not create it
-            self.create_basic_data()
+            logger.info("✅ Database tables created successfully")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize database: {e}")

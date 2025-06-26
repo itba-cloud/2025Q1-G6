@@ -12,4 +12,4 @@ COPY . .
 # Set environment variables (optional)
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "sqs_runner.py"]
+CMD ["uvicorn", "scraper_api:app", "--host", "0.0.0.0", "--port", "8001"]

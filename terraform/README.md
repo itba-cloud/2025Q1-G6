@@ -1,34 +1,7 @@
 # Terraform
 
-Para armar esto hay que cargar la imagen antes de aplicar el resto
+Para correr el proyecto hay que verificar que todos los archivos que terminen en .sh esten en formato LF. Especiamente frontend/build.sh
 
-terraform apply -target="module.ecr"
+Una vez que esta eso con correr terraform init y terraform apply deberia funcionar.
 
-
-
-# TODO:
-
-armar 
-
-./push.sh
-
-terraform apply
-
-La region y el url te lo manda el output de terraform apply
-
-En mi caso sale esto ->
-
-"992382783225.dkr.ecr.us-east-1.amazonaws.com/mercado-scraper:latest"
-
-Hay que modificar el string para generar el comando de abajo
-
-```aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 992382783225.dkr.ecr.us-east-1.amazonaws.com```
-
-Cuando tenemos eso podemos generar la imagen de docker y pushearla
-
-```bash
-docker build -t backend ./backend
-docker tag backend:latest "992382783225.dkr.ecr.us-east-1.amazonaws.com/mercado-scraper:latest"
-docker push "992382783225.dkr.ecr.us-east-1.amazonaws.com/mercado-scraper:latest"
-```
-
+Para correrlo es necesario docker y en windows WSL.

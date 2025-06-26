@@ -2,10 +2,11 @@ import os
 import json
 import logging
 import boto3
+import uuid
 from botocore.config import Config
 from database import Database
 from models import ClientQueries
-from sentence_transformers import SentenceTransformer
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scraper")
@@ -20,7 +21,6 @@ SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")  # or hardcode it here
 
 # Initialize global objects (if needed)
 db = Database()
-model = SentenceTransformer('all-MiniLM-L6-v2')  # if needed elsewhere
 
 def lambda_handler(event, context):
     try:
@@ -47,7 +47,8 @@ def lambda_handler(event, context):
             response = sqs.send_message(
                 QueueUrl=SQS_QUEUE_URL,
                 MessageBody=message_body,
-                MessageGroupId="default"  # required for FIFO queues
+                MessageGroupId="default",  # required for FIFO queues
+                MessageDeduplicationId=str(uuid.uuid4())
             )
             logger.info("SQS message sent for query '%s': %s", query_text, response.get("MessageId"))
 

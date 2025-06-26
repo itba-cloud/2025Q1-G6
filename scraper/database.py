@@ -34,7 +34,7 @@ class Database:
             
             # Initialize database tables
             self.initialize_database()
-            
+
         except Exception as e:
             logger.error(f"❌ Database connection failed: {e}")
             # Initialize session anyway for health checks
@@ -59,8 +59,7 @@ class Database:
             Base.metadata.create_all(self.engine)
             logger.info("✅ Database tables created successfully")
             
-            # Check if basic data exists, if not create it
-            self.create_basic_data()
+            
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize database: {e}")
@@ -146,7 +145,11 @@ class Database:
                         LIMIT 5;    -- Limits the results to the top 5 closest matches
                     """)
         return self.session.execute(raw_query).first()
-    def find_listing_by_ml_id(self,product):
-        return self.session.query(Listings).filter(Listings.external_id == product.ml_id , Listings.marketplace_id == 1).first()
-    def retrieve_queries(self,queries:list[String]):
+    def find_listing_by_ml_id(self, ml_id: str):
+        """Retrieve listing by MercadoLibre listing id."""
+        return self.session.query(Listings).filter(
+            Listings.external_id == ml_id,
+            Listings.marketplace_id == 1
+        ).first()
+    def retrieve_queries(self, queries: list[str]):
         return self.session.query(Queries).filter(Queries.query_text.in_(queries)).all()

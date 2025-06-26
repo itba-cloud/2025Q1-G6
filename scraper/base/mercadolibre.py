@@ -26,30 +26,34 @@ class MercadoLibre(RequestsManager):
             
             #soup = BeautifulSoup(res.text, 'html.parser')
             for li in soup.find_all("li", {"class": "ui-search-layout__item"}):
-                url = li.find("a").attrs["href"].split("#")[0]
-                
-                img_url = li.find("div",{"class": "poly-card__portada"}).find("img").attrs["src"]
-                if "data" in img_url:
-                    img_url = li.find("div",{"class": "poly-card__portada"}).find("img").attrs["data-src"]
-                if "mclics" in url: #ads that are not from the search
+                try:
+                    url = li.find("a").attrs["href"].split("#")[0]
+                    
+                    img_url = li.find("div",{"class": "poly-card__portada"}).find("img").attrs["src"]
+                    if "data" in img_url:
+                        img_url = li.find("div",{"class": "poly-card__portada"}).find("img").attrs["data-src"]
+                    if "mclics" in url: #ads that are not from the search
+                        continue
+                    if "/p/" in url:
+                        ml_id = url.split("/p/")[-1]
+                    else:
+                        ml_id = url.split("/")[3]
+                        ml_id = ml_id.split("-")
+                        ml_id = "".join(ml_id[0:2])
+                    title = li.find("a").text
+                    price = li.find("span", {"class": "andes-money-amount__fraction"} ).text.replace(".","")
+                    price = float(price.replace(",", "."))
+                    results.append({
+                        "title": title,
+                        "price": price,
+                        "ml_id": ml_id,
+                        "url": url,
+                        "query": key,
+                        "img_url": img_url
+                    })
+                except Exception as e:
+                    print(f"Error fetching content from {url}: {e}")
                     continue
-                if "/p/" in url:
-                    ml_id = url.split("/p/")[-1]
-                else:
-                    ml_id = url.split("/")[3]
-                    ml_id = ml_id.split("-")
-                    ml_id = "".join(ml_id[0:2])
-                title = li.find("a").text
-                price = li.find("span", {"class": "andes-money-amount__fraction"} ).text.replace(".","")
-                price = float(price.replace(",", "."))
-                results.append({
-                    "title": title,
-                    "price": price,
-                    "ml_id": ml_id,
-                    "url": url,
-                    "query": key,
-                    "img_url": img_url
-                })
         self.data = pd.DataFrame(results)
         self.data = (
             self.data.groupby("ml_id", as_index=False)

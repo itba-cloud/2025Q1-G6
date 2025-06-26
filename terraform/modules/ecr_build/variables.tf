@@ -35,4 +35,13 @@ variable "cleanup_local_images" {
   description = "Whether to cleanup local Docker images after pushing"
   type        = bool
   default     = true
-} 
+}
+
+variable "vite_url" {
+  description = "The VITE_URL to inject into the backend Docker build as a build arg."
+  type        = string
+  validation {
+    condition     = can(regex("https?://", var.vite_url))
+    error_message = "Vite URL must start with http:// or https://"
+  }
+}

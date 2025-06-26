@@ -3,11 +3,6 @@ output "backend_image" {
   value       = local.backend_image
 }
 
-output "frontend_image" {
-  description = "Frontend image URI with immutable tag"
-  value       = local.frontend_image
-}
-
 output "scraper_image" {
   description = "Scraper image URI with immutable tag"
   value       = local.scraper_image

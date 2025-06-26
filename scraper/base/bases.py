@@ -144,7 +144,6 @@ class RequestsManager(BaseScraper):
         else:
             print("Session not declared, cannot close")
     def __del__(self):
-        if not self.session_declared:
-            asyncio.run(self.close())
-        else:
-            print("Session not closed, declared outside of the class")
+        # Do not attempt to close async resources in __del__
+        # Instead, require explicit close() in user code
+        pass
